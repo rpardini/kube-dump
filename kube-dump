@@ -115,15 +115,6 @@ usage() {
 		      --kube-cluster            The name of the kubeconfig cluster to use
 		      --kube-insecure-tls       Skip check server's certificate for validity
 
-		Git commit flags:
-		  -c, --git-commit              Commit changes
-		  -p, --git-push                Commit changes and push to origin
-		  -b, --git-branch              Branch name
-		      --git-commit-user         Commit author username
-		      --git-commit-email        Commit author email
-		      --git-remote-name         Remote repo name, defualt is origin
-		      --git-remote-url          Remote repo URL
-
 		Archivate flags:
 		  -a, --archivate               Create archive of data dir
 		      --archive-rotate-days     Rotate archives older than N days
@@ -159,10 +150,8 @@ args=$(
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
 		-l "help,silent,destination:,force-remove,output-by-type" \
-		-l "git-commit,git-push,git-branch:,git-commit-user:,git-commit-email:" \
-		-l "git-remote-name:,git-remote-url:" \
 		-l "archivate,archive-rotate-days:,archive-type:" \
-		-o "n:,r:,k:,h,s,d:,f,c,p,b:,a" -- "${@:2}"
+		-o "n:,r:,k:,h,s,d:,f,a" -- "${@:2}"
 )
 eval set -- "$args"
 while [ $# -ge 1 ]; do
@@ -223,40 +212,6 @@ while [ $# -ge 1 ]; do
 			force_remove='true'
 			shift
 			;;
-			# Commit opts
-		-c | --git-commit)
-			git_commit='true'
-			shift
-			;;
-		-p | --git-push)
-			git_push='true'
-			shift
-			;;
-		-b | --git-branch)
-			git_branch="$2"
-			shift
-			shift
-			;;
-		--git-commit-user)
-			git_commit_user="$2"
-			shift
-			shift
-			;;
-		--git-commit-email)
-			git_commit_email="$2"
-			shift
-			shift
-			;;
-		--git-remote-name)
-			git_remote_name="$2"
-			shift
-			shift
-			;;
-		--git-remote-url)
-			git_remote_url="$2"
-			shift
-			shift
-			;;
 			# Archivate opts
 		-a | --archivate)
 			archivate='true'
@@ -292,21 +247,12 @@ fi
 : "${kube_context:=$KUBE_CONTEXT}"
 : "${kube_cluster:=$KUBE_CLUSTER}"
 : "${kube_insecure_tls:=$KUBE_INSECURE_TLS}"
-: "${git_commit:=$GIT_COMMIT}"
-: "${git_branch:=$GIT_BRANCH}"
-: "${git_commit_user:=$GIT_COMMIT_USER}"
-: "${git_commit_email:=$GIT_COMMIT_EMAIL}"
-: "${git_remote_name:=$GIT_REMOTE_NAME}"
-: "${git_remote_url:=$GIT_REMOTE_URL}"
-: "${git_push:=$GIT_PUSH}"
 : "${archivate:=$ARCHIVATE}"
 : "${archive_rotate:=$ARCHIVE_ROTATE}"
 : "${archive_type:=$ARCHIVE_TYPE}"
 
 # Check dependency
 require kubectl jq yq
-[ "$git_commit" == 'true' ] &&
-	require git
 [ "$archivate" == 'true' ] && [ "$archive_type" == 'xz' ] &&
 	require tar xz
 [ "$archivate" == 'true' ] && [ "$archive_type" == 'gzip' ] &&
@@ -422,28 +368,6 @@ elif [ "${force_remove:-$FORCE_REMOVE}" == 'true' ]; then
 	sleep 3
 	find "$destination_dir" -mindepth 1 -maxdepth 1 -type d ! -name '.git' \
 		-exec rm -fr "{}" \;
-fi
-
-# Git try to clone
-if [ "$git_push" == 'true' ] && [ ! -d "$destination_dir/.git/" ]; then
-
-	if ! grep --quiet --extended-regexp 'https?:\/\/' <<< "$git_remote_url"; then
-
-		_remote_url=$(sed -r 's|.*@([A-Za-z0-9\.-]+):.*|\1|' <<< "$git_remote_url")
-		! grep --quiet "^$_remote_url " ~/.ssh/known_hosts > /dev/null 2>&1 &&
-			ssh-keyscan "$_remote_url" >> ~/.ssh/known_hosts 2> /dev/null
-
-		git clone --branch "$git_branch" --single-branch --depth 1 \
-			--quiet "$_remote_url" "$destination_dir" > /dev/null 2>&1 &&
-			success 'The remote repository is cloned at' "$destination_dir" ||
-			warn 'Unable to clone remote repository at' "$destination_dir"
-
-	else
-		git clone --branch "$git_branch" --single-branch --depth 1 \
-			--quiet "$git_remote_url" "$destination_dir" > /dev/null 2>&1 &&
-			success 'The remote repository is cloned at' "$destination_dir" ||
-			warn 'Unable to clone remote repository at' "$destination_dir"
-	fi
 fi
 
 success 'Dump data in' "$destination_dir" 'directory' ''
@@ -568,65 +492,6 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 		# Finished with resource
 	done
 	success 'Cluster' "$context" 'resources dump completed' ''
-fi
-
-# Git
-if [ "$git_commit" == 'true' ] || [ "$git_push" == 'true' ]; then
-
-	cd "$destination_dir"
-	# Init repo if not exist
-	if [ ! -d "$destination_dir/.git/" ]; then
-		git init . --quiet
-		success 'The repository is created in the' "$destination_dir/.git/" \
-			'directory'
-	fi
-	# Set branch
-	if [ -z "$git_branch" ]; then
-		git_branch="$(git symbolic-ref --short HEAD)"
-	else
-		git checkout -b "$git_branch" > /dev/null 2>&1 || true
-	fi
-
-	# Set git username if need
-	if [ -z "$git_commit_user" ] && ! git config user.name > /dev/null 2>&1; then
-		git config --local user.name 'Kube-dump'
-	elif [ -n "$git_commit_user" ]; then
-		git config --local user.name "$git_commit_user"
-	fi
-	# Set git email if need
-	if [ -z "$git_commit_email" ] && ! git config user.email > /dev/null 2>&1; then
-		git config --local user.email "$context"
-	elif [ -n "$git_commit_email" ]; then
-		git config --local user.email "$git_commit_email"
-	fi
-
-	# Ignore archives
-	[ ! -f "$destination_dir/.gitignore" ] && printf '%s\n' \
-		'*.tar.xz' '*.tar.gz' '*.tar.bz2' '*.tar' > "$destination_dir/.gitignore"
-
-	# Commit all
-	if [ -n "$(git status --porcelain)" ]; then
-		_commit_message="Kubernetes $context cluster data dumped at $timestamp"
-		git add .
-		git add . --all
-		git commit --all --quiet --message="$_commit_message"
-		success 'Changes commited with message:' "$_commit_message"
-	else
-		success 'No changes,' 'nothing to commit' 'in git repository'
-	fi
-
-	if [ "$git_push" == 'true' ]; then
-
-		# Set git repository url if need
-		if ! git ls-remote > /dev/null 2>&1 && [ -z "$git_remote_url" ]; then
-			warn "Remote git repository url not set, cannot push"
-		elif [ -n "$git_remote_url" ]; then
-			git remote add "${git_remote_name:-origin}" \
-				"$git_remote_url" > /dev/null 2>&1 || true
-		fi
-		git pull --ff-only "$git_remote_url" "$git_branch" || true
-		git push --quiet --set-upstream "${git_remote_name:-origin}" "$git_branch"
-	fi
 fi
 
 # Archivate
