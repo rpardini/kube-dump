@@ -104,7 +104,6 @@ usage() {
 		  -s, --silent                  Execute silently, suppress all stdout messages
 		  -d, --destination-dir         Path to dir for store dumps, default ./data
 		  -f, --force-remove            Delete resources in data directory before launch
-		      --output-by-type          Organize output into directories by resource type
 
 		Kubernetes flags:
 		  -n, --namespaces              List of kubernetes namespaces
@@ -149,7 +148,7 @@ args=$(
 	getopt \
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
-		-l "help,silent,destination:,force-remove,output-by-type" \
+		-l "help,silent,destination:,force-remove" \
 		-l "archivate,archive-rotate-days:,archive-type:" \
 		-o "n:,r:,k:,h,s,d:,f,a" -- "${@:2}"
 )
@@ -203,10 +202,6 @@ while [ $# -ge 1 ]; do
 			shift
 			shift
 			;;
-		--output-by-type)
-			output_by_type='true'
-			shift
-			;;
 			# Dump opts
 		-f | --force-remove)
 			force_remove='true'
@@ -242,7 +237,6 @@ fi
 
 # Set vars
 : "${silent:=$SILENT}"
-: "${output_by_type:=$OUTPUT_BY_TYPE}"
 : "${kube_config:=$KUBE_CONFIG}"
 : "${kube_context:=$KUBE_CONTEXT}"
 : "${kube_cluster:=$KUBE_CLUSTER}"
@@ -395,17 +389,9 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 			# By default, output all resources in the same namespace dir
 			destination_resource_dir="$destination_namespace_dir"
 
-			# Optionally create resource dir
-			if [ "$output_by_type" == 'true' ]; then
-				destination_resource_dir="$destination_resource_dir/$resource"
-				[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
-			fi
-
-			# Destination file name suffix, eg "_pod" or empty
-			destination_suffix="_$resource"
-			if [ "$output_by_type" == 'true' ]; then
-				destination_suffix="" # resource suffix was moved to dir
-			fi
+			# create resource dir
+			destination_resource_dir="$destination_resource_dir/$resource"
+			[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
 
 			# Iterate over only accessible resources
 			while read -r name; do
@@ -423,7 +409,7 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 
 				msg-start "$resource" "$name"
 
-				destination_resource_name="${name//:/-}${destination_suffix}.yaml"
+				destination_resource_name="${name//:/-}.yaml"
 
 				# Save resource to file
 				kubectl --namespace="${ns}" get \
@@ -457,23 +443,17 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 	# Iterate over resources
 	for resource in ${cluster_resources//,/ }; do
 
-		# Optionally create resource dir
-		if [ "$output_by_type" == 'true' ]; then
-			destination_resource_dir="$destination_resource_dir/$resource"
-			[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
-		fi
+		heading 'Dump cluster data resource' "'$context' / '$resource'"
 
-		# Destination file name suffix, eg "_pod" or empty
-		destination_suffix="_$resource"
-		if [ "$output_by_type" == 'true' ]; then
-			destination_suffix="" # resource suffix was moved to dir
-		fi
+		# create resource dir
+		destination_resource_dir="$destination_resource_dir/$resource"
+		[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
 
 		# Iterate over only accessible resources
 		while read -r name; do
 			msg-start "$resource" "$name"
 
-			destination_resource_name="${name//:/-}${destination_suffix}.yaml"
+			destination_resource_name="${name//:/-}.yaml"
 
 			# Save resource to file
 			kubectl get \
