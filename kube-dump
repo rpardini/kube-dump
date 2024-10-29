@@ -467,6 +467,10 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 		)
 		# Finished with resource
 	done
+
+	# Remove empty directories
+	find "$destination_dir/cluster" -mindepth 1 -maxdepth 1 -type d -empty -delete
+
 	success 'Cluster' "$context" 'resources dump completed' ''
 fi
 
