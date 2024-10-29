@@ -246,7 +246,7 @@ fi
 : "${archive_type:=$ARCHIVE_TYPE}"
 
 # Check dependency
-require kubectl jq yq
+require kubectl jq
 [ "$archivate" == 'true' ] && [ "$archive_type" == 'xz' ] &&
 	require tar xz
 [ "$archivate" == 'true' ] && [ "$archive_type" == 'gzip' ] &&
@@ -406,12 +406,8 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 				destination_resource_name="${name//:/-}.yaml"
 
 				# Save resource to file
-				kubectl --namespace="${ns}" get \
-					--output='json' "$resource" "$name" "${k_args[@]}" 2> /dev/null |
-					jq --exit-status --compact-output --monochrome-output \
-						--raw-output --sort-keys 2> /dev/null |
-					yq eval --prettyPrint --no-colors --exit-status - \
-						> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
+				kubectl --namespace="${ns}" get --output='yaml' "$resource" "$name" "${k_args[@]}" \
+					> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
 					msg-end "$resource" "$name" || msg-fail "$resource" "$name"
 
 			done < <(
@@ -446,12 +442,8 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 			destination_resource_name="${name//:/-}.yaml"
 
 			# Save resource to file
-			kubectl get \
-				--output='json' "$resource" "$name" "${k_args[@]}" |
-				jq --exit-status --compact-output --monochrome-output \
-					--raw-output --sort-keys 2> /dev/null |
-				yq eval --prettyPrint --no-colors --exit-status - \
-					> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
+			kubectl get --output='yaml' "$resource" "$name" "${k_args[@]}" \
+				> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
 				msg-end "$resource" "$name" || msg-fail "$resource" "$name"
 
 		done < <(
