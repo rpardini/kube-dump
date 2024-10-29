@@ -378,20 +378,10 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 			continue
 		fi
 
-		# Create namespace dir
-		destination_namespace_dir="$destination_dir/$ns"
-		[ -d "$destination_namespace_dir" ] || mkdir -p "$destination_namespace_dir"
 		heading 'Dump namespace' "$ns"
 
 		# Iterate over resources
 		for resource in ${namespaced_resources//,/ }; do
-
-			# By default, output all resources in the same namespace dir
-			destination_resource_dir="$destination_namespace_dir"
-
-			# create resource dir
-			destination_resource_dir="$destination_resource_dir/$resource"
-			[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
 
 			# Iterate over only accessible resources
 			while read -r name; do
@@ -408,6 +398,10 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 				fi
 
 				msg-start "$resource" "$name"
+
+				# create resource dir
+				destination_resource_dir="$destination_dir/$ns/$resource"
+				[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
 
 				destination_resource_name="${name//:/-}.yaml"
 
@@ -441,13 +435,13 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 
 		heading 'Dump cluster data resource' "'$context' / '$resource'"
 
-		# create resource dir
-		destination_resource_dir="$destination_dir/cluster/$resource"
-		[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
-
 		# Iterate over only accessible resources
 		while read -r name; do
 			msg-start "$resource" "$name"
+
+			# create resource dir
+			destination_resource_dir="$destination_dir/cluster/$resource"
+			[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
 
 			destination_resource_name="${name//:/-}.yaml"
 
@@ -467,9 +461,6 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 		)
 		# Finished with resource
 	done
-
-	# Remove empty directories
-	find "$destination_dir/cluster" -mindepth 1 -maxdepth 1 -type d -empty -delete
 
 	success 'Cluster' "$context" 'resources dump completed' ''
 fi
