@@ -106,7 +106,6 @@ usage() {
 		  -f, --force-remove            Delete resources in data directory before launch
 		      --detailed                Do not remove detailed state specific fields
 		      --output-by-type          Organize output into directories by resource type
-		      --flat                    Organize all resources of the same type in the same file
 
 		Kubernetes flags:
 		  -n, --namespaces              List of kubernetes namespaces
@@ -160,7 +159,7 @@ args=$(
 	getopt \
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
-		-l "help,silent,destination:,force-remove,detailed,output-by-type,flat" \
+		-l "help,silent,destination:,force-remove,detailed,output-by-type" \
 		-l "git-commit,git-push,git-branch:,git-commit-user:,git-commit-email:" \
 		-l "git-remote-name:,git-remote-url:" \
 		-l "archivate,archive-rotate-days:,archive-type:" \
@@ -222,10 +221,6 @@ while [ $# -ge 1 ]; do
 			;;
 		--output-by-type)
 			output_by_type='true'
-			shift
-			;;
-		--flat)
-			output_flat='true'
 			shift
 			;;
 			# Dump opts
@@ -299,7 +294,6 @@ fi
 : "${silent:=$SILENT}"
 : "${detailed:=$DETAILED}"
 : "${output_by_type:=$OUTPUT_BY_TYPE}"
-: "${output_flat:=$FLAT}"
 : "${kube_config:=$KUBE_CONFIG}"
 : "${kube_context:=$KUBE_CONTEXT}"
 : "${kube_cluster:=$KUBE_CLUSTER}"
@@ -544,56 +538,39 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 				destination_suffix="" # resource suffix was moved to dir
 			fi
 
-			if [ "$output_flat" == 'true' ]; then
-				msg-start "$resource"
+			# Iterate over only accessible resources
+			while read -r name; do
+				[ -z "$name" ] && continue
 
-				destination_resource_name="all${destination_suffix}.yaml"
+				# Skip service-account-token secrets
+				if [ "$resource" == 'secret' ]; then
+					type=$(
+						kubectl get --namespace="${ns}" --output=jsonpath="{.type}" \
+							secret "$name" "${k_args[@]}"
+					)
+					[ "$type" == 'kubernetes.io/service-account-token' ] && continue
+					unset type
+				fi
 
-				# Save resources to file
+				msg-start "$resource" "$name"
+
+				destination_resource_name="${name//:/-}${destination_suffix}.yaml"
+
+				# Save resource to file
 				kubectl --namespace="${ns}" get \
-					--output='json' "$resource" "${k_args[@]}" 2> /dev/null |
+					--output='json' "$resource" "$name" "${k_args[@]}" 2> /dev/null |
 					jq --exit-status --compact-output --monochrome-output \
 						--raw-output --sort-keys \
 						"$namespaced_jq_filter" 2> /dev/null |
 					yq eval --prettyPrint --no-colors --exit-status - \
 						> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
-					msg-end "$resource" || msg-fail "$resource"
+					msg-end "$resource" "$name" || msg-fail "$resource" "$name"
 
-			else
-				# Iterate over only accessible resources
-				while read -r name; do
-					[ -z "$name" ] && continue
-
-					# Skip service-account-token secrets
-					if [ "$resource" == 'secret' ]; then
-						type=$(
-							kubectl get --namespace="${ns}" --output=jsonpath="{.type}" \
-								secret "$name" "${k_args[@]}"
-						)
-						[ "$type" == 'kubernetes.io/service-account-token' ] && continue
-						unset type
-					fi
-
-					msg-start "$resource" "$name"
-
-					destination_resource_name="${name//:/-}${destination_suffix}.yaml"
-
-					# Save resource to file
-					kubectl --namespace="${ns}" get \
-						--output='json' "$resource" "$name" "${k_args[@]}" 2> /dev/null |
-						jq --exit-status --compact-output --monochrome-output \
-							--raw-output --sort-keys \
-							"$namespaced_jq_filter" 2> /dev/null |
-						yq eval --prettyPrint --no-colors --exit-status - \
-							> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
-						msg-end "$resource" "$name" || msg-fail "$resource" "$name"
-
-				done < <(
-					kubectl --namespace="${ns}" get "$resource" \
-						--output='custom-columns=NAME:.metadata.name' \
-						--no-headers "${k_args[@]}" 2> /dev/null
-				)
-			fi
+			done < <(
+				kubectl --namespace="${ns}" get "$resource" \
+					--output='custom-columns=NAME:.metadata.name' \
+					--no-headers "${k_args[@]}" 2> /dev/null
+			)
 			# Finished with resource
 		done
 		success 'Namespace' "$ns" 'resources dump completed' ''
@@ -624,44 +601,27 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 			destination_suffix="" # resource suffix was moved to dir
 		fi
 
-		if [ "$output_flat" == 'true' ]; then
-			msg-start "$resource"
+		# Iterate over only accessible resources
+		while read -r name; do
+			msg-start "$resource" "$name"
 
-			destination_resource_name="all${destination_suffix}.yaml"
+			destination_resource_name="${name//:/-}${destination_suffix}.yaml"
 
 			# Save resource to file
 			kubectl get \
-				--output='json' "$resource" "${k_args[@]}" |
+				--output='json' "$resource" "$name" "${k_args[@]}" |
 				jq --exit-status --compact-output --monochrome-output \
 					--raw-output --sort-keys \
 					"$cluster_jq_filter" 2> /dev/null |
 				yq eval --prettyPrint --no-colors --exit-status - \
 					> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
-				msg-end "$resource" || msg-fail "$resource"
+				msg-end "$resource" "$name" || msg-fail "$resource" "$name"
 
-		else
-			# Iterate over only accessible resources
-			while read -r name; do
-				msg-start "$resource" "$name"
-
-				destination_resource_name="${name//:/-}${destination_suffix}.yaml"
-
-				# Save resource to file
-				kubectl get \
-					--output='json' "$resource" "$name" "${k_args[@]}" |
-					jq --exit-status --compact-output --monochrome-output \
-						--raw-output --sort-keys \
-						"$cluster_jq_filter" 2> /dev/null |
-					yq eval --prettyPrint --no-colors --exit-status - \
-						> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
-					msg-end "$resource" "$name" || msg-fail "$resource" "$name"
-
-			done < <(
-				kubectl get "$resource" \
-					--output='custom-columns=NAME:.metadata.name' \
-					--no-headers "${k_args[@]}" 2> /dev/null
-			)
-		fi
+		done < <(
+			kubectl get "$resource" \
+				--output='custom-columns=NAME:.metadata.name' \
+				--no-headers "${k_args[@]}" 2> /dev/null
+		)
 		# Finished with resource
 	done
 	success 'Cluster' "$context" 'resources dump completed' ''
