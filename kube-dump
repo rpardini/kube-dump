@@ -104,7 +104,6 @@ usage() {
 		  -s, --silent                  Execute silently, suppress all stdout messages
 		  -d, --destination-dir         Path to dir for store dumps, default ./data
 		  -f, --force-remove            Delete resources in data directory before launch
-		      --detailed                Do not remove detailed state specific fields
 		      --output-by-type          Organize output into directories by resource type
 
 		Kubernetes flags:
@@ -159,7 +158,7 @@ args=$(
 	getopt \
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
-		-l "help,silent,destination:,force-remove,detailed,output-by-type" \
+		-l "help,silent,destination:,force-remove,output-by-type" \
 		-l "git-commit,git-push,git-branch:,git-commit-user:,git-commit-email:" \
 		-l "git-remote-name:,git-remote-url:" \
 		-l "archivate,archive-rotate-days:,archive-type:" \
@@ -213,10 +212,6 @@ while [ $# -ge 1 ]; do
 		-d | --destination-dir)
 			destination_dir="$2"
 			shift
-			shift
-			;;
-		--detailed)
-			detailed='true'
 			shift
 			;;
 		--output-by-type)
@@ -292,7 +287,6 @@ fi
 
 # Set vars
 : "${silent:=$SILENT}"
-: "${detailed:=$DETAILED}"
 : "${output_by_type:=$OUTPUT_BY_TYPE}"
 : "${kube_config:=$KUBE_CONFIG}"
 : "${kube_context:=$KUBE_CONTEXT}"
@@ -417,55 +411,6 @@ else
 	cluster_resources=${cluster_resources:-$CLUSTER_RESOURCES}
 fi
 
-# default jq filter removes detailed fiends from cluster resources
-cluster_jq_filter=$(
-	cat <<- END
-		  del(
-		    .metadata.annotations."kubectl.kubernetes.io/last-applied-configuration",
-		    .metadata.annotations."control-plane.alpha.kubernetes.io/leader",
-		    .metadata.uid,
-		    .metadata.selfLink,
-		    .metadata.resourceVersion,
-		    .metadata.creationTimestamp,
-		    .metadata.generation
-		  )
-	END
-)
-# default jq filter removes detailed fiends from namespaced resources
-namespaced_jq_filter=$(
-	cat <<- END
-		  del(
-		    .metadata.annotations."autoscaling.alpha.kubernetes.io/conditions",
-		    .metadata.annotations."autoscaling.alpha.kubernetes.io/current-metrics",
-		    .metadata.annotations."control-plane.alpha.kubernetes.io/leader",
-		    .metadata.annotations."deployment.kubernetes.io/revision",
-		    .metadata.annotations."kubectl.kubernetes.io/last-applied-configuration",
-		    .metadata.annotations."kubernetes.io/service-account.uid",
-		    .metadata.annotations."pv.kubernetes.io/bind-completed",
-		    .metadata.annotations."pv.kubernetes.io/bound-by-controller",
-		    .metadata.finalizers,
-		    .metadata.managedFields,
-		    .metadata.creationTimestamp,
-		    .metadata.generation,
-		    .metadata.resourceVersion,
-		    .metadata.selfLink,
-		    .metadata.uid,
-		    .spec.clusterIP,
-		    .spec.progressDeadlineSeconds,
-		    .spec.revisionHistoryLimit,
-		    .spec.template.metadata.annotations."kubectl.kubernetes.io/restartedAt",
-		    .spec.template.metadata.creationTimestamp,
-		    .spec.volumeName,
-		    .spec.volumeMode,
-		    .status
-		  )
-	END
-)
-# Optionally remove jq del
-if [ "$detailed" == 'true' ]; then
-	namespaced_jq_filter=''
-fi
-
 # Dump dir
 destination_dir="${destination_dir:-${DESTINATION_DIR:-$working_dir/data}}"
 destination_dir="$(realpath "$destination_dir" --canonicalize-missing)"
@@ -560,8 +505,7 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 				kubectl --namespace="${ns}" get \
 					--output='json' "$resource" "$name" "${k_args[@]}" 2> /dev/null |
 					jq --exit-status --compact-output --monochrome-output \
-						--raw-output --sort-keys \
-						"$namespaced_jq_filter" 2> /dev/null |
+						--raw-output --sort-keys 2> /dev/null |
 					yq eval --prettyPrint --no-colors --exit-status - \
 						> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
 					msg-end "$resource" "$name" || msg-fail "$resource" "$name"
@@ -611,8 +555,7 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 			kubectl get \
 				--output='json' "$resource" "$name" "${k_args[@]}" |
 				jq --exit-status --compact-output --monochrome-output \
-					--raw-output --sort-keys \
-					"$cluster_jq_filter" 2> /dev/null |
+					--raw-output --sort-keys 2> /dev/null |
 				yq eval --prettyPrint --no-colors --exit-status - \
 					> "$destination_resource_dir/$destination_resource_name" 2> /dev/null &&
 				msg-end "$resource" "$name" || msg-fail "$resource" "$name"
