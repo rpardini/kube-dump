@@ -21,6 +21,23 @@
 
 set -e
 
+# resource types to ignore completely.
+declare -A ignored_resources=(
+	# pods and metrics;
+	[pods]=1
+	[pods.metrics.k8s.io]=1
+	# leases
+	[leases.coordination.k8s.io]=1
+	# endpoints, slices, and cilium endpoint stuff
+	[endpoints]=1
+	[endpointslices.discovery.k8s.io]=1
+	[ciliumendpoints.cilium.io]=1
+	# node metrics
+	[nodes.metrics.k8s.io]=1
+	# cilium identities
+	[ciliumidentities.cilium.io]=1
+)
+
 # Messages
 log() {
 	printf '%s [%s] %s\n' "$(date '+%Y/%m/%d %H:%M:%S')" "$1" "${@:2}"
@@ -383,6 +400,9 @@ if [[ "$mode" =~ ^(dump|all|dump-namespaces|ns)$ ]]; then
 		# Iterate over resources
 		for resource in ${namespaced_resources//,/ }; do
 
+			# Skip ignored resources
+			[ -n "${ignored_resources[$resource]}" ] && continue
+
 			# Iterate over only accessible resources
 			while read -r name; do
 				[ -z "$name" ] && continue
@@ -428,6 +448,9 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 
 	# Iterate over resources
 	for resource in ${cluster_resources//,/ }; do
+
+		# Skip ignored resources
+		[ -n "${ignored_resources[$resource]}" ] && continue
 
 		heading 'Dump cluster data resource' "'$context' / '$resource'"
 
