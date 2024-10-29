@@ -1,15 +1,17 @@
-FROM alpine:3.15
+FROM alpine:3
 
-ARG KUBECTL_VERSION="1.24.0"
+ARG KUBECTL_VERSION="1.30.6"
+ARG TARGETARCH
 
-LABEL maintainer="woozymasta@gmail.com"
+RUN apk add --update --no-cache bash bind-tools jq yq openssh-client git tar xz gzip bzip2 curl coreutils grep
 
-# hadolint ignore=DL3018
-RUN apk add --update --no-cache \
-    bash bind-tools jq yq openssh-client git tar xz gzip bzip2 curl coreutils grep && \
-    curl -sLo /usr/bin/kubectl \
-    "https://storage.googleapis.com/kubernetes-release/release/v$KUBECTL_VERSION/bin/linux/amd64/kubectl" && \
+RUN set  -x && ARCH=$(echo $TARGETARCH) && \
+    URL="https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/$ARCH/kubectl" && \
+    echo "Downloading for ARCH: $ARCH via URL: $URL" && \
+    curl -Lo /usr/bin/kubectl "${URL}" && \
     chmod +x /usr/bin/kubectl
+
+RUN kubectl version --client
 
 COPY ./kube-dump /kube-dump
 
