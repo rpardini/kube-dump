@@ -436,17 +436,13 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 
 	heading 'Dump cluster data' "$context"
 
-	# Create cluster directory
-	destination_resource_dir="$destination_dir/cluster"
-	[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
-
 	# Iterate over resources
 	for resource in ${cluster_resources//,/ }; do
 
 		heading 'Dump cluster data resource' "'$context' / '$resource'"
 
 		# create resource dir
-		destination_resource_dir="$destination_resource_dir/$resource"
+		destination_resource_dir="$destination_dir/cluster/$resource"
 		[ -d "$destination_resource_dir" ] || mkdir -p "$destination_resource_dir"
 
 		# Iterate over only accessible resources
