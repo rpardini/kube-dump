@@ -28,22 +28,53 @@ spec:
           serviceAccountName: {{ include "kube-dump.serviceAccountName" . }}
           securityContext:
             {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          volumes:
+          {{- if and .Values.dump.output.nfs .Values.dump.output.nfs.enabled }}
+          # Ensure .Values.dump.output.nfs.server and .Values.dump.output.nfs.path are set, else fail the deployment
+          {{- if not .Values.dump.output.nfs.server }}{{- fail "You must set dump.output.nfs.server" }}{{- end }}
+          {{- if not .Values.dump.output.nfs.path }}{{- fail "You must set dump.output.nfs.path" }}{{- end }}
+            - name: output-nfs
+              nfs:
+                server: "{{ .Values.dump.output.nfs.server }}"
+                path: "{{ .Values.dump.output.nfs.path }}"
+                readOnly: false
+          {{- end }}
+          {{- with .Values.volumes }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           containers:
             - name: {{ .Chart.Name }}
               securityContext:
                 {{- toYaml .Values.securityContext | nindent 16 }}
               image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
               imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args:
+                - "{{ default "all" .Values.dump.type }}" # all / ns / cls (all / namespace objects / cluster objects)
+                {{- if .Values.dump.namespaces }}
+                - "--namespaces={{ .Values.dump.namespaces | join "," }}"
+                {{- end }}
+              env:
+                {{- if and .Values.dump.encrypt .Values.dump.encrypt.recipients }}
+                # Check if values.dump.encrypt.recipients has more than 9 elements, if so, fail the deployment
+                {{- if gt (len .Values.dump.encrypt.recipients) 9 }}
+                {{- fail "You can only specify up to 9 recipients for encryption" }}
+                {{- end }}
+                # If values.dump.encrypt.recipients is not an empty list or null, pass the recipients each in an environment variable, AGE_RECIPIENT_1, AGE_RECIPIENT_2, etc up to AGE_RECIPIENT_9
+                {{- range $index, $element := .Values.dump.encrypt.recipients }}
+                - name: AGE_RECIPIENT_{{ add $index 1 }}
+                  value: "{{ $element }}"
+                {{- end }}
+                {{- end }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
-              {{- with .Values.volumeMounts }}
               volumeMounts:
+              {{- if and .Values.dump.output.nfs .Values.dump.output.nfs.enabled }}
+                - name: output-nfs
+                  mountPath: /output
+              {{- end }}
+              {{- with .Values.volumeMounts }}
                 {{- toYaml . | nindent 16 }}
               {{- end }}
-          {{- with .Values.volumes }}
-          volumes:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           {{- with .Values.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}

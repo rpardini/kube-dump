@@ -4,6 +4,18 @@
 
 cronSchedule: "0 0 * * *" # Example schedule, adjust as needed
 
+# Controls kube-dump options.
+dump:
+  type: "all" # all / ns / cls (all / namespaced objects / cluster objects) [default: all]
+  namespaces: # [ "kube-system", "cilium" ] # List of namespaces to dump, empty list (default) means all namespaces; only applies when type is "all" or "ns"
+  encrypt: # list of "age" recipients to encrypt the dump with; up to nine can be specified; if none, dump is not encrypted. if more than one specified, any of them can decrypt.
+    recipients: # [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDJhuKnM2yPGoj//d6CW2hZKuAilBpXYHNb1Xm2pajpW someone@candecrypt.net" ]
+  output:
+    nfs:
+      enabled: false
+      #server: "192.168.66.97"
+      #path: "/mnt/adhoc/kube-dump/vmtest"
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: ghcr.io/rpardini/kube-dump
