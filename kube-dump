@@ -130,13 +130,11 @@ usage() {
 		      --kube-cluster            The name of the kubeconfig cluster to use
 		      --kube-insecure-tls       Skip check server's certificate for validity
 
-		Archivate flags:
-		  -a, --archivate               Create archive of data dir
+		Archive flags:
 		      --archive-rotate-days     Rotate archives older than N days
-		      --archive-type            Archive type xz, gz or bz2, default is tar
 
 		Example of use:
-		  ${0##*/} dump-namespaces -n default,dev -d /mnt/dump -spa --archive-type gz
+		  ${0##*/} dump-namespaces -n default,dev -d /mnt/dump -s
 
 		Report bugs at:
 		  https://github.com/WoozyMasta/kube-dump/issues
@@ -165,8 +163,8 @@ args=$(
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
 		-l "help,silent,destination:" \
-		-l "archivate,archive-rotate-days:,archive-type:" \
-		-o "n:,r:,k:,h,s,d:,a" -- "${@:2}"
+		-l "archive-rotate-days:" \
+		-o "n:,r:,k:,h,s,d:" -- "${@:2}"
 )
 eval set -- "$args"
 while [ $# -ge 1 ]; do
@@ -218,18 +216,9 @@ while [ $# -ge 1 ]; do
 			shift
 			shift
 			;;
-			# Archivate opts
-		-a | --archivate)
-			archivate='true'
-			shift
-			;;
+			# Archive opts
 		--archive-rotate-days)
 			archive_rotate="$2"
-			shift
-			shift
-			;;
-		--archive-type)
-			archive_type="$2"
 			shift
 			shift
 			;;
@@ -252,18 +241,10 @@ fi
 : "${kube_context:=$KUBE_CONTEXT}"
 : "${kube_cluster:=$KUBE_CLUSTER}"
 : "${kube_insecure_tls:=$KUBE_INSECURE_TLS}"
-: "${archivate:=$ARCHIVATE}"
 : "${archive_rotate:=$ARCHIVE_ROTATE}"
-: "${archive_type:=$ARCHIVE_TYPE}"
 
 # Check dependency
-require kubectl jq
-[ "$archivate" == 'true' ] && [ "$archive_type" == 'xz' ] &&
-	require tar xz
-[ "$archivate" == 'true' ] && [ "$archive_type" == 'gzip' ] &&
-	require tar gzip
-[ "$archivate" == 'true' ] && [ "$archive_type" == 'bzip2' ] &&
-	require tar bzip2
+require kubectl jq tar gzip
 
 # Kubectl args
 [ -n "$kube_config" ] && k_args+=("--kubeconfig=$kube_config")
@@ -467,34 +448,17 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 	success 'Cluster' "$context" 'resources dump completed' ''
 fi
 
-# Archivate
-if [ "$archivate" == 'true' ]; then
+# Archive
+_archive="${dump_dir}/dump_$timestamp.tar.gz"
 
-	# Set compression flag and archive name
-	[ "$archive_type" == 'xz' ] && _compress='--xz'
-	[ "$archive_type" == 'gz' ] && _compress='--gzip'
-	[ "$archive_type" == 'bz2' ] && _compress='--bzip2'
-	if [ -n "$_compress" ]; then
-		_archive="${dump_dir}/dump_$timestamp.tar.$archive_type"
-	else
-		_archive="${dump_dir}/dump_$timestamp.tar"
-	fi
+# Create archive
+tar --create --file="$_archive" --absolute-names --gzip --exclude-vcs --exclude='*.tar.gz' --directory="${dump_dir%/*}" "${dump_dir##*/}"
+success 'Archive' "$_archive" 'created'
 
-	# Create archive
-	tar --create --file="$_archive" --absolute-names $_compress \
-		--exclude-vcs --exclude='*.tar' --exclude='*.tar.xz' \
-		--exclude='*.tar.gz' --exclude='*.tar.bz2' \
-		--directory="${dump_dir%/*}" "${dump_dir##*/}"
-	success 'Archive' "$_archive" 'created'
-
-	# Rotate archives
-	if [ -n "$archive_rotate" ]; then
-		find "${dump_dir}" -mindepth 1 -maxdepth 1 -type f -name "*.tar" \
-			-o -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.tar.bz2" \
-			-mtime +"$archive_rotate" -delete
-		success 'Rotatinon for older than' "$archive_rotate days" \
-			"*.tar.${archive_type:-xz} archives removed"
-	fi
+# Rotate archives
+if [ -n "$archive_rotate" ]; then
+	find "${dump_dir}" -mindepth 1 -maxdepth 1 -type f -name "*.tar.gz" -mtime +"$archive_rotate" -delete
+	success 'Rotation for older than' "$archive_rotate days" "*.tar.gz archives removed"
 fi
 
 # Done
