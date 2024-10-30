@@ -141,11 +141,7 @@ usage() {
 		      --archive-rotate-days     Rotate archives older than N days
 
 		Example of use:
-		  ${0##*/} dump-namespaces -n default,dev -d /mnt/dump -s
-
-		Report bugs at:
-		  https://github.com/WoozyMasta/kube-dump/issues
-		  <woozymasta@gmail.com>
+		  ${0##*/} dump-namespaces -n default,dev
 
 	EOF
 	exit 1
