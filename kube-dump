@@ -120,6 +120,7 @@ usage() {
 		  -h, --help                    This help
 		  -s, --silent                  Execute silently, suppress all stdout messages
 		  -d, --dump-dir                Path to dir to store dumps, default ./dump
+		  -o, --output-dir              Path to dir to store output tarballs, default ./output
 
 		Kubernetes flags:
 		  -n, --namespaces              List of kubernetes namespaces
@@ -162,9 +163,9 @@ args=$(
 	getopt \
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
-		-l "help,silent,destination:" \
+		-l "help,silent,destination:,output:" \
 		-l "archive-rotate-days:" \
-		-o "n:,r:,k:,h,s,d:" -- "${@:2}"
+		-o "n:,r:,k:,h,s,d:,o:" -- "${@:2}"
 )
 eval set -- "$args"
 while [ $# -ge 1 ]; do
@@ -213,6 +214,11 @@ while [ $# -ge 1 ]; do
 			;;
 		-d | --dump-dir)
 			dump_dir="$2"
+			shift
+			shift
+			;;
+		-o | --output-dir)
+			output_dir="$2"
 			shift
 			shift
 			;;
@@ -325,23 +331,29 @@ fi
 # Set namespaced resources
 # https://kubernetes.io/docs/reference/kubectl/overview/#resource-types
 if [ -z "${namespaced_resources:-$NAMESPACED_RESOURCES}" ]; then
-	namespaced_resources="$(		kubectl api-resources --namespaced=true --output=name "${k_args[@]}" | tr '\n' ' '	)"
+	namespaced_resources="$(kubectl api-resources --namespaced=true --output=name "${k_args[@]}" | tr '\n' ' ')"
 else
 	namespaced_resources=${namespaced_resources:-$NAMESPACED_RESOURCES}
 fi
 
 # Set cluster resources
 if [ -z "${cluster_resources:-$CLUSTER_RESOURCES}" ]; then
-	cluster_resources="$(		kubectl api-resources --namespaced=false --output=name "${k_args[@]}" | tr '\n' ' '	)"
+	cluster_resources="$(kubectl api-resources --namespaced=false --output=name "${k_args[@]}" | tr '\n' ' ')"
 else
 	cluster_resources=${cluster_resources:-$CLUSTER_RESOURCES}
 fi
 
 # Dump dir
-dump_dir="${dump_dir:-${DUMP_DIR:-$working_dir/dump}}"
+dump_dir="${dump_dir:-${DUMP_DIR:-${working_dir}/dump}}"
 dump_dir="$(realpath "$dump_dir" --canonicalize-missing)"
 mkdir -p "$dump_dir"
 success 'Dump data directory' "$dump_dir" 'created'
+
+# Output dir
+output_dir="${output_dir:-${OUTPUT_DIR:-${working_dir}/output}}"
+output_dir="$(realpath "$output_dir" --canonicalize-missing)"
+mkdir -p "$output_dir"
+success 'Output data (tarballs) directory' "$output_dir" 'created'
 
 success 'Dump data in' "$dump_dir" 'directory' ''
 score=0
@@ -441,10 +453,10 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 fi
 
 # Archive
-_archive="${dump_dir}/dump_$timestamp.tar.gz"
+_archive="${output_dir}/k8s_yamls_$timestamp.tar.gz"
 
-# Create archive
-tar --create --file="$_archive" --absolute-names --gzip --exclude-vcs --exclude='*.tar.gz' --directory="${dump_dir%/*}" "${dump_dir##*/}"
+# Create tar.gz of the contents of the dump directory
+tar -czf "$_archive" -C "$dump_dir" .
 success 'Archive' "$_archive" 'created'
 
 # Rotate archives
