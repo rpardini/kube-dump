@@ -9,7 +9,7 @@ on:
 permissions:
   contents: write
   packages: write
-  actions: write # For keepalive
+  actions: write # For keepalive @TODO implement the keepalive
 
 env:
   # This image's versions, image will be tagged with the combinations (:MAJOR, :MAJOR.MINOR, :MAJOR.MINOR.PATCH) plus "latest"
@@ -18,7 +18,7 @@ env:
   PATCH: "1"
 
 jobs:
-  docker:
+  build:
     runs-on: ubuntu-latest
     steps:
 
@@ -27,6 +27,9 @@ jobs:
 
       - name: ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0
+
+      - name: Setup the latest version of Helm
+        uses: azure/setup-helm@v4.2.0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -41,6 +44,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }} # github username or org
           password: ${{ secrets.GITHUB_TOKEN }}    # github actions builtin token. repo has to have pkg access.
+
+      - name: Helm login to GitHub Container Registry
+        run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io/${{ github.repository_owner }} --username ${{ github.actor }} --password-stdin
 
       - name: Build and push the Docker image
         id: docker_build
@@ -61,3 +67,9 @@ jobs:
           cache-from: type=gha # all-automatic Github Actions caching
           cache-to: type=gha,mode=max
           tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}},ghcr.io/${{ github.repository }}:${{env.MAJOR}}.${{env.MINOR}},ghcr.io/${{ github.repository }}:${{env.MAJOR}}
+
+      - name: Create Helm Chart package tgz
+        run: helm package charts/kube-dump --dependency-update --version "${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}"
+
+      - name: Push Helm chart tgz to oci -chart package
+        run: helm push kube-dump-${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}.tgz oci://ghcr.io/${{ github.repository }}-chart
