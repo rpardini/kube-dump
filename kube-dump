@@ -45,19 +45,19 @@ log() {
 msg-start() {
 	[ "$silent" == 'true' ] && return
 	if [ -t 1 ]; then
-		printf '\e[1;33m%-15s\e[m%-30s%s\n' 'Processing' "$1" "${@:2}"
+		printf '\e[1;33m%-15s\e[m%-30s %s\n' 'Processing' "$1" "${@:2}"
 	else log INFO "Processing dump $*"; fi
 }
 msg-end() {
 	[ "$silent" == 'true' ] && return
 	if [ -t 1 ]; then
-		printf '\e[1A\e[1;32m%-15s\e[m%-30s%s\n' 'Success' "$1" "${@:2}"
+		printf '\e[1A\e[1;32m%-15s\e[m%-30s %s\n' 'Success' "$1" "${@:2}"
 	else log INFO "Successfully dumped $*"; fi
 }
 msg-fail() {
 	[ "$silent" == 'true' ] && return
 	if [ -t 1 ]; then
-		printf '\e[1A\e[1;31m%-15s\e[m%-30s%s\n' 'Fail' "$1" "${@:2}"
+		printf '\e[1A\e[1;31m%-15s\e[m%-30s %s\n' 'Fail' "$1" "${@:2}"
 	else log WARNING "Failed dump $*"; fi
 }
 success() {
@@ -70,7 +70,7 @@ success() {
 heading() {
 	[ "$silent" == 'true' ] && return
 	if [ -t 1 ]; then
-		printf '%s \e[1;34m%s\e[m %s\n%-15s%-30s%s\n' \
+		printf '%s \e[1;34m%s\e[m %s\n%-15s%-30s %s\n' \
 			"$1" "$2" 'started' 'STATE' 'RESOURCE' 'NAME'
 	else log INFO "$*"; fi
 }
@@ -325,20 +325,14 @@ fi
 # Set namespaced resources
 # https://kubernetes.io/docs/reference/kubectl/overview/#resource-types
 if [ -z "${namespaced_resources:-$NAMESPACED_RESOURCES}" ]; then
-	namespaced_resources="$(
-		kubectl api-resources --namespaced=true --output=name "${k_args[@]}" |
-			tr '\n' ' '
-	)"
+	namespaced_resources="$(		kubectl api-resources --namespaced=true --output=name "${k_args[@]}" | tr '\n' ' '	)"
 else
 	namespaced_resources=${namespaced_resources:-$NAMESPACED_RESOURCES}
 fi
 
 # Set cluster resources
 if [ -z "${cluster_resources:-$CLUSTER_RESOURCES}" ]; then
-	cluster_resources="$(
-		kubectl api-resources --namespaced=false --output=name "${k_args[@]}" |
-			tr '\n' ' '
-	)"
+	cluster_resources="$(		kubectl api-resources --namespaced=false --output=name "${k_args[@]}" | tr '\n' ' '	)"
 else
 	cluster_resources=${cluster_resources:-$CLUSTER_RESOURCES}
 fi
@@ -419,8 +413,6 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 
 		# Skip ignored resources
 		[ -n "${ignored_resources[$resource]}" ] && continue
-
-		heading 'Dump cluster data resource' "'$context' / '$resource'"
 
 		# Iterate over only accessible resources
 		while read -r name; do
