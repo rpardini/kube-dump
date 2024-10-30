@@ -15,7 +15,7 @@ env:
   # This image's versions, image will be tagged with the combinations (:MAJOR, :MAJOR.MINOR, :MAJOR.MINOR.PATCH) plus "latest"
   MAJOR: "0"
   MINOR: "1"
-  PATCH: "1"
+  PATCH: "2"
 
 jobs:
   build:
@@ -68,8 +68,14 @@ jobs:
           cache-to: type=gha,mode=max
           tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}},ghcr.io/${{ github.repository }}:${{env.MAJOR}}.${{env.MINOR}},ghcr.io/${{ github.repository }}:${{env.MAJOR}}
 
+      - name: Patch the versions in the Chart.yaml
+        run: |
+          sed -i "s/^appVersion: .*/appVersion: \"${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}\"/" charts/kube-dump/Chart.yaml
+          sed -i "s/^version: .*/version: \"${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}\"/" charts/kube-dump/Chart.yaml
+          git diff || true
+
       - name: Create Helm Chart package tgz
-        run: helm package charts/kube-dump --dependency-update --version "${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}"
+        run: helm package charts/kube-dump
 
       - name: Push Helm chart tgz to oci -chart package
-        run: helm push kube-dump-${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}.tgz oci://ghcr.io/${{ github.repository }}-chart
+        run: helm push kube-dump-*.tgz oci://ghcr.io/${{ github.repository }}-chart

@@ -2,5 +2,5 @@ apiVersion: v2
 name: kube-dump
 description: A Helm chart for kube-dump
 type: application
-version: "0.1.1" # auto:version
-appVersion: "0.1.1" # auto:appversion
+version: "0.1.1" # this will be patched automatically during GHA workflow
+appVersion: "0.1.1" # this will be patched automatically during GHA workflow
