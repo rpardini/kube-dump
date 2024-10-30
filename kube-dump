@@ -120,7 +120,6 @@ usage() {
 		  -h, --help                    This help
 		  -s, --silent                  Execute silently, suppress all stdout messages
 		  -d, --dump-dir                Path to dir to store dumps, default ./dump
-		  -f, --force-remove            Delete resources in data directory before launch
 
 		Kubernetes flags:
 		  -n, --namespaces              List of kubernetes namespaces
@@ -165,9 +164,9 @@ args=$(
 	getopt \
 		-l "namespaces:,namespaced-resources:,cluster-resources:" \
 		-l "kube-config:,kube-context:,kube-cluster:,kube-insecure-tls" \
-		-l "help,silent,destination:,force-remove" \
+		-l "help,silent,destination:" \
 		-l "archivate,archive-rotate-days:,archive-type:" \
-		-o "n:,r:,k:,h,s,d:,f,a" -- "${@:2}"
+		-o "n:,r:,k:,h,s,d:,a" -- "${@:2}"
 )
 eval set -- "$args"
 while [ $# -ge 1 ]; do
@@ -217,11 +216,6 @@ while [ $# -ge 1 ]; do
 		-d | --dump-dir)
 			dump_dir="$2"
 			shift
-			shift
-			;;
-			# Dump opts
-		-f | --force-remove)
-			force_remove='true'
 			shift
 			;;
 			# Archivate opts
@@ -371,15 +365,8 @@ fi
 # Dump dir
 dump_dir="${dump_dir:-${DUMP_DIR:-$working_dir/dump}}"
 dump_dir="$(realpath "$dump_dir" --canonicalize-missing)"
-if [ ! -d "$dump_dir" ]; then
-	mkdir -p "$dump_dir"
-	success 'Dump data directory' "$dump_dir" 'created'
-elif [ "${force_remove:-$FORCE_REMOVE}" == 'true' ]; then
-	warn "Destination $dump_dir directory will be removed"
-	sleep 3
-	find "$dump_dir" -mindepth 1 -maxdepth 1 -type d ! -name '.git' \
-		-exec rm -fr "{}" \;
-fi
+mkdir -p "$dump_dir"
+success 'Dump data directory' "$dump_dir" 'created'
 
 success 'Dump data in' "$dump_dir" 'directory' ''
 score=0
