@@ -248,6 +248,24 @@ fi
 # Check dependency
 require kubectl jq tar gzip
 
+# 'age' recipents
+declare -a age_recipients=()
+# check for AGE_RECIPIENT_1, AGE_RECIPIENT_2, etc up to AGE_RECIPIENT_9; add to array if environment var set.
+for i in $(seq 1 9); do
+	age_recipient_var="AGE_RECIPIENT_${i}"
+	if [ -n "${!age_recipient_var}" ]; then
+		success "Found age encryption recipient: ${age_recipient_var}" "${!age_recipient_var}"
+		age_recipients+=("--recipient" "${!age_recipient_var}")
+	fi
+done
+
+# if more than zero elements in age_recipients array, require age command
+if [ ${#age_recipients[@]} -gt 0 ]; then
+	require age
+else
+	success "No age encryption recipients found, tarball will be unencrypted."
+fi
+
 # Kubectl args
 [ -n "$kube_config" ] && k_args+=("--kubeconfig=$kube_config")
 [ -n "$kube_context" ] && k_args+=("--context=$kube_context")
@@ -448,17 +466,33 @@ if [[ "$mode" =~ ^(dump|all|dump-cluster|cls)$ ]]; then
 	success 'Cluster' "$context" 'resources dump completed' ''
 fi
 
+# Create temporary directory to store tarball
+tmp_dir=$(mktemp -d)
+
 # Archive
-_archive="${output_dir}/k8s_yamls_$timestamp.tar.gz"
+_archive="${tmp_dir}/k8s_yamls_$timestamp.tar.gz"
 
 # Create tar.gz of the contents of the dump directory
 tar -czf "$_archive" -C "$dump_dir" .
 success 'Archive' "$_archive" 'created'
 
+# Use age if recipients are set, otherwise just move the tarball to output
+if [ ${#age_recipients[@]} -gt 0 ]; then
+	# Use "age" to encrypt the tarball
+	_archive_encrypted="${output_dir}/k8s_yamls_$timestamp.tar.gz.age"
+	age --encrypt --armor "${age_recipients[@]}" --output "$_archive_encrypted" "$_archive"
+	success 'Encrypted archive' "$_archive_encrypted" 'created'
+else
+	# Move the tarball to the output directory
+	_archive_unencrypted="${output_dir}/k8s_yamls_$timestamp.tar.gz"
+	mv "$_archive" "$_archive_unencrypted"
+	success 'Moved archive' "$_archive_unencrypted" 'to output directory'
+fi
+
 # Rotate archives
 if [ -n "$archive_rotate" ]; then
-	find "${dump_dir}" -mindepth 1 -maxdepth 1 -type f -name "*.tar.gz" -mtime +"$archive_rotate" -delete
-	success 'Rotation for older than' "$archive_rotate days" "*.tar.gz archives removed"
+	find "${dump_dir}" -mindepth 1 -maxdepth 1 -type f -name "*.tar.gz" -o -name "*.tar.gz.age" -mtime +"$archive_rotate" -delete
+	success 'Rotation for older than' "$archive_rotate days" "archives removed"
 fi
 
 # Done
