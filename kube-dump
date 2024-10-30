@@ -149,10 +149,6 @@ usage() {
 working_dir="$(pwd)"
 timestamp="$(date '+%Y.%m.%d_%H-%M')"
 
-# Read vars from env
-# shellcheck disable=SC1090,SC1091
-[ -f "$working_dir/.env" ] && . "$working_dir/.env"
-
 # Parse args commands
 if [[ "${1:-$MODE}" =~ ^(dump|all|dump-namespaces|ns|dump-cluster|cls)$ ]]; then
 	mode="${1:-$MODE}"

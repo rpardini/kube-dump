@@ -1,6 +1,3 @@
-extras/*
-data/*
-*.tar.gz
-*.tar.xz
-*.tar
-*.zip
+# ignore everything _except_ the kube-dump file
+*
+!kube-dump
