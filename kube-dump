@@ -142,7 +142,7 @@ usage() {
 		  <woozymasta@gmail.com>
 
 	EOF
-	exit 0
+	exit 1
 }
 
 # Set common vars
