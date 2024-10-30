@@ -1,1 +1,1 @@
-kube-dump should be deployed to the cluster as a CronJob.
+kube-dump should now be deployed to the cluster as a CronJob.

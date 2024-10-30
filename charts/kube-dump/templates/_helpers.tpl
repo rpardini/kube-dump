@@ -65,9 +65,5 @@ Create the name of the service account to use
 Create the name of the cluster role binding to use
 */}}
 {{- define "kube-dump.clusterRoleBindingName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "kube-dump.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
+{{- include "kube-dump.fullname" . }}-crb
 {{- end }}
