@@ -67,6 +67,12 @@ success() {
 	else log INFO "$*"; fi
 	score=$((score + 1))
 }
+info() {
+	[ "$silent" == 'true' ] && return
+	if [ -t 1 ]; then
+		printf '%s \e[1;36m%s\e[m %s\n' "$1" "$2" "${@:3}"
+	else log INFO "$*"; fi
+}
 heading() {
 	[ "$silent" == 'true' ] && return
 	if [ -t 1 ]; then
@@ -254,7 +260,7 @@ declare -a age_recipients=()
 for i in $(seq 1 9); do
 	age_recipient_var="AGE_RECIPIENT_${i}"
 	if [ -n "${!age_recipient_var}" ]; then
-		success "Found age encryption recipient: ${age_recipient_var}" "${!age_recipient_var}"
+		info "Found age encryption recipient: ${age_recipient_var}" "${!age_recipient_var}"
 		age_recipients+=("--recipient" "${!age_recipient_var}")
 	fi
 done
@@ -263,7 +269,7 @@ done
 if [ ${#age_recipients[@]} -gt 0 ]; then
 	require age
 else
-	success "No age encryption recipients found, tarball will be unencrypted."
+	info "No age encryption recipients found, tarball will be unencrypted."
 fi
 
 # Kubectl args
@@ -361,15 +367,26 @@ fi
 dump_dir="${dump_dir:-${DUMP_DIR:-${working_dir}/dump}}"
 dump_dir="$(realpath "$dump_dir" --canonicalize-missing)"
 mkdir -p "$dump_dir"
-success 'Dump data directory' "$dump_dir" 'created'
+info 'Dump data directory' "$dump_dir" 'created'
+
+# make sure we can write to the dump directory, otherwise fail early.
+touch "${dump_dir}/.kube-dump-test" || fail "Can't write to dump directory: $dump_dir"
+rm -f "${dump_dir}/.kube-dump-test"
 
 # Output dir
 output_dir="${output_dir:-${OUTPUT_DIR:-${working_dir}/output}}"
 output_dir="$(realpath "$output_dir" --canonicalize-missing)"
 mkdir -p "$output_dir"
-success 'Output data (tarballs) directory' "$output_dir" 'created'
+info 'Output data (tarballs) directory' "$output_dir" 'created'
 
-success 'Dump data in' "$dump_dir" 'directory' ''
+# List the contents of the output_dir directory at this (early) stage.
+info 'Listing contents of dump directory' "$output_dir" 'early'
+ls -lah "${output_dir}" || fail "Can't list contents of output directory: $output_dir"
+# make sure we can write to the output directory, otherwise fail early.
+touch "${output_dir}/.kube-dump-test" || fail "Can't write to output directory: $output_dir"
+rm -f "${output_dir}/.kube-dump-test"
+
+info 'Dump data in' "$dump_dir" 'directory' ''
 score=0
 
 # Work with namespaced resources
@@ -474,26 +491,30 @@ _archive="${tmp_dir}/k8s_yamls_$timestamp.tar.gz"
 
 # Create tar.gz of the contents of the dump directory
 tar -czf "$_archive" -C "$dump_dir" .
-success 'Archive' "$_archive" 'created'
+info 'Archive' "$_archive" 'created'
 
 # Use age if recipients are set, otherwise just move the tarball to output
 if [ ${#age_recipients[@]} -gt 0 ]; then
 	# Use "age" to encrypt the tarball
 	_archive_encrypted="${output_dir}/k8s_yamls_$timestamp.tar.gz.age"
 	age --encrypt --armor "${age_recipients[@]}" --output "$_archive_encrypted" "$_archive"
-	success 'Encrypted archive' "$_archive_encrypted" 'created'
+	info 'Encrypted archive' "$_archive_encrypted" 'created'
 else
 	# Move the tarball to the output directory
 	_archive_unencrypted="${output_dir}/k8s_yamls_$timestamp.tar.gz"
 	mv "$_archive" "$_archive_unencrypted"
-	success 'Moved archive' "$_archive_unencrypted" 'to output directory'
+	info 'Moved archive' "$_archive_unencrypted" 'to output directory'
 fi
 
 # Rotate archives
 if [ -n "$archive_rotate" ]; then
 	find "${dump_dir}" -mindepth 1 -maxdepth 1 -type f -name "*.tar.gz" -o -name "*.tar.gz.age" -mtime +"$archive_rotate" -delete
-	success 'Rotation for older than' "$archive_rotate days" "archives removed"
+	info 'Rotation for older than' "$archive_rotate days" "archives removed"
 fi
+
+# List the contents of the output_dir directory at this (late) stage.
+info 'Listing contents of dump directory' "$output_dir" 'late'
+ls -lah "${output_dir}" || fail "Can't list contents of output directory: $output_dir"
 
 # Done
 if [ "$score" -ge 0 ]; then
