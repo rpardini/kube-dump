@@ -9,13 +9,13 @@ on:
 permissions:
   contents: write
   packages: write
-  actions: write # For keepalive @TODO implement the keepalive
+  actions: write # For keepalive (last step)
 
 env:
   # This image's versions, image will be tagged with the combinations (:MAJOR, :MAJOR.MINOR, :MAJOR.MINOR.PATCH) plus "latest"
   MAJOR: "0"
   MINOR: "1"
-  PATCH: "4"
+  PATCH: "5"
 
 jobs:
   build:
@@ -72,10 +72,9 @@ jobs:
 
       - name: Patch the versions in the Chart.yaml and the image reference in values.yaml
         run: |
-          sed -i "s/^appVersion: .*/appVersion: \"${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}\"/" charts/kube-dump/Chart.yaml
-          sed -i "s/^version: .*/version: \"${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}\"/" charts/kube-dump/Chart.yaml
-          # patch the image reference in values.yaml; line begins with "  repository:"
-          sed -i "s|^  repository: .*|  repository: \"ghcr.io/${{ github.repository }}\"|" charts/kube-dump/values.yaml
+          sed -i "s|^appVersion: .*|appVersion: \"${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}\" # set by GHA at $(date)|" charts/kube-dump/Chart.yaml
+          sed -i "s|^version: .*|version: \"${{env.MAJOR}}.${{env.MINOR}}.${{env.PATCH}}\" # set by GHA at $(date)|" charts/kube-dump/Chart.yaml
+          sed -i "s|^  repository: .*|  repository: \"ghcr.io/${{ github.repository }}\" # set by GHA at $(date)|" charts/kube-dump/values.yaml
           git diff || true
 
       - name: Create Helm Chart package tgz
@@ -83,3 +82,13 @@ jobs:
 
       - name: Push Helm chart tgz to oci -chart package
         run: helm push kube-dump-*.tgz oci://ghcr.io/${{ github.repository }}-chart
+
+      - name: Commit changes and push (GHA keepalive)
+        run: |
+          rm -f kube-dump-*.tgz # don't add the temp helm tgz
+          git config --global user.name "GHA workflow"
+          git config --global user.email "workflow@github.com"
+          git add . || true
+          git commit -m "gha: auto-updated after build ${{ github.run_number }} at $(date)" || true
+          git push || { echo "Push failed, retrying"; sleep $((1 + $RANDOM % 10)); git pull --rebase; git push; }
+          git push || { echo "Push failed, retrying"; sleep $((1 + $RANDOM % 10)); git pull --rebase; git push; }
